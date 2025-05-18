@@ -32,8 +32,12 @@ const (
 	INTERCEPTION_RULES_FILE     = "interception_rules.json"    // Name of the rules file
 )
 
-var tlsCert tls.Certificate
-var errCertLoad error
+var (
+	mitmCertPathDefault = "services.sonarr.tv.crt" // The public certificate for services.sonarr.tv
+	mitmKeyPathDefault  = "services.sonarr.tv.key" // The UNENCRYPTED private key for services.sonarr.tv
+	tlsCert             tls.Certificate
+	errCertLoad         error
+)
 
 // Structures (SeriesMapping, InterceptionRule) remain the same
 type SeriesMapping struct {
@@ -86,8 +90,21 @@ var (
 func loadMitmCertificate() {
 	// These paths are relative to the execution directory of your Go application.
 	// Ensure these files are present there.
-	certPath := "services.sonarr.tv.crt" // The public certificate for services.sonarr.tv
-	keyPath := "services.sonarr.tv.key"  // The UNENCRYPTED private key for services.sonarr.tv
+	certPath := os.Getenv("MITM_CERT_PATH")
+	if certPath == "" {
+		certPath = mitmCertPathDefault
+		addLog(fmt.Sprintf("ℹ️ MITM_CERT_PATH not set, using default path: %s", certPath))
+	} else {
+		addLog(fmt.Sprintf("ℹ️ Using MITM_CERT_PATH: %s", certPath))
+	}
+
+	keyPath := os.Getenv("MITM_KEY_PATH")
+	if keyPath == "" {
+		keyPath = mitmKeyPathDefault
+		addLog(fmt.Sprintf("ℹ️ MITM_KEY_PATH not set, using default path: %s", keyPath))
+	} else {
+		addLog(fmt.Sprintf("ℹ️ Using MITM_KEY_PATH: %s", keyPath))
+	}
 
 	// Attempt to load the key/certificate pair
 	loadedCert, loadErr := tls.LoadX509KeyPair(certPath, keyPath)

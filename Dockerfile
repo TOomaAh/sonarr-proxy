@@ -18,6 +18,9 @@ WORKDIR /app
 # Copier l'exécutable compilé
 COPY --from=builder /app/sonarr-proxy /app/sonarr-proxy
 
+ENV MITM_CERT_PATH="/app/certs/services.sonarr.tv.crt"
+ENV MITM_KEY_PATH="/app/certs/services.sonarr.tv.key"
+
 # Copier le script d'entrée
 COPY entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh
