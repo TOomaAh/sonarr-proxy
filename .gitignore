@@ -1,2 +1,6 @@
 *.exe
 *.json
+*.crt
+*.key
+*.ext
+*.csr
