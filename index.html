@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Sonarr Proxy - Administration</title>
+    <meta charset="UTF-8">
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
+        .container { max-width: 1200px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        h1, h2 { color: #333; }
+        .stats { background: #e8f4fd; padding: 15px; border-radius: 5px; margin-bottom: 20px; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+        input, textarea, select { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
+        button { background: #007cba; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background: #005a87; }
+        .mapping-item { background: #f9f9f9; padding: 15px; margin-bottom: 10px; border-radius: 5px; border: 1px solid #e0e0e0; }
+        .mapping-header { display: flex; justify-content: space-between; align-items: center; }
+        .delete-btn { background: #dc3545; padding: 5px 10px; font-size: 12px; }
+        .delete-btn:hover { background: #c82333; }
+        .success { color: #28a745; }
+        .error { color: #dc3545; }
+        .tabs { margin-bottom: 20px; }
+        .tab-button { background: #f8f9fa; border: 1px solid #dee2e6; padding: 10px 20px; cursor: pointer; display: inline-block; margin-right: 5px; }
+        .tab-button.active { background: #007cba; color: white; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .logs { background: #f8f8f8; padding: 10px; border: 1px solid #ddd; height: 300px; overflow-y: scroll; font-family: monospace; font-size: 12px; }
+        .rules { margin-top: 20px; }
+        .rule-item { background: #fff3cd; padding: 10px; margin-bottom: 8px; border-radius: 4px; border: 1px solid #ffeaa7; }
+        small { color: #666; font-size: 12px; display: block; margin-top: 2px; }
+        .checkbox-group { display: flex; align-items: center; margin-top: 10px; }
+        .checkbox-group input[type="checkbox"] { width: auto; margin-right: 8px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎬 Sonarr Proxy - Admin Interface</h1>
+        
+        <div class="stats">
+            <h3>📊 Statistics</h3>
+            <p><strong>Sonarr Host:</strong> {{.SonarrHost}}</p>
+            <p><strong>Proxy Port:</strong> {{.ProxyPort}}</p>
+            <p><strong>Configured Mappings:</strong> {{.MappingCount}}</p>
+            <p><strong>Scenemapping Cache Status:</strong> <span id="cacheStatusColor">{{.CacheStatus}}</span> (<span id="lastCacheUpdate">{{.LastCacheUpdate}}</span>)</p>
+            <p><small>To intercept scenemappings, configure Sonarr to use this HTTP proxy.</small></p>
+        </div>
+
+        <div class="tabs">
+            <div class="tab-button active" onclick="showTab('mappings')">🔗 Mapping Management</div>
+            <div class="tab-button" onclick="showTab('rules')">📏 Interception Rules</div>
+            <div class="tab-button" onclick="showTab('logs')">📝 Real-time Logs</div>
+            <div class="tab-button" onclick="showTab('test')">🧪 Search Test</div>
+        </div>
+
+        <!-- Tab: Mappings -->
+        <div id="mappings" class="tab-content active">
+            <h2>➕ Add a new mapping</h2>
+            <form id="addMappingForm">
+                <div class="form-group">
+                    <label for="tvdbId">TVDB ID:</label>
+                    <input type="number" id="tvdbId" name="tvdbId" required 
+                           placeholder="Ex: 152831">
+                    <small>Series ID on TheTVDB (you can find it in the TVDB URL)</small>
+                </div>
+                <div class="form-group">
+                    <label for="official">Official Name (in Sonarr/TVDB):</label>
+                    <input type="text" id="official" name="official" required 
+                           placeholder="Ex: Adventure Time With Finn and Jake">
+                    <small>Exact name as displayed in Sonarr</small>
+                </div>
+                <div class="form-group">
+                    <label for="tracker">Name on Trackers:</label>
+                    <input type="text" id="tracker" name="tracker" required 
+                           placeholder="Ex: Adventure Time">
+                    <small>Name used in torrent files/releases</small>
+                </div>
+                <div class="form-group">
+                    <label for="season">Season (-1 for all):</label>
+                    <input type="number" id="season" name="season" value="-1" 
+                           placeholder="-1">
+                    <small>-1 = all seasons, or specify a specific season number</small>
+                </div>
+                <div class="form-group">
+                    <label for="note">Note (optional):</label>
+                    <input type="text" id="note" name="note" 
+                           placeholder="Ex: Short name used on all trackers">
+                    <small>Description to remind you why this mapping exists</small>
+                </div>
+                <button type="submit">Add Mapping</button>
+            </form>
+
+            <div id="message"></div>
+
+            <h2>📋 Existing Mappings ({{.MappingCount}})</h2>
+            {{if gt .MappingCount 0}}
+            <div id="mappingsList">
+                {{range $key, $mapping := .Mappings}}
+                <div class="mapping-item" id="mapping-{{$key}}">
+                    <div class="mapping-header">
+                        <div>
+                            <strong>{{$mapping.Official}}</strong> → <em>{{$mapping.Tracker}}</em>
+                            <small>📺 TVDB ID: {{$mapping.TvdbId}}</small>
+                            {{if ne $mapping.Season -1}}
+                            <small>🎭 Season: {{$mapping.Season}}</small>
+                            {{else}}
+                            <small>🎭 All seasons</small>
+                            {{end}}
+                            {{if $mapping.Note}}
+                            <small>📝 {{$mapping.Note}}</small>
+                            {{end}}
+                        </div>
+                        <button class="delete-btn" onclick="deleteMapping('{{$key}}')">🗑️ Delete</button>
+                    </div>
+                </div>
+                {{end}}
+            </div>
+            {{else}}
+            <div style="text-align: center; color: #666; padding: 20px;">
+                <p>No mappings configured. Add one to get started!</p>
+            </div>
+            {{end}}
+        </div>
+
+        <!-- Tab: Rules -->
+        <div id="rules" class="tab-content">
+            <h2>➕ Add an Interception Rule</h2>
+            <form id="addRuleForm">
+                <div class="form-group">
+                    <label for="ruleName">Rule Name:</label>
+                    <input type="text" id="ruleName" name="name" required 
+                           placeholder="Ex: Log all searches">
+                </div>
+                <div class="form-group">
+                    <label for="ruleMethod">HTTP Method:</label>
+                    <select id="ruleMethod" name="method">
+                        <option value="">All</option>
+                        <option value="GET">GET</option>
+                        <option value="POST">POST</option>
+                        <option value="PUT">PUT</option>
+                        <option value="DELETE">DELETE</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="rulePattern">URL Pattern:</label>
+                    <input type="text" id="rulePattern" name="pathPattern" 
+                           placeholder="Ex: /v1/scenemapping (leave empty for all)">
+                    <small>Part of the URL to match (e.g., /v1/scenemapping, /api/v3/series, /release)</small>
+                </div>
+                <div class="form-group">
+                    <label for="ruleBodyType">Body Type:</label>
+                    <select id="ruleBodyType" name="bodyType">
+                        <option value="request">Request</option>
+                        <option value="response">Response</option>
+                        <option value="both">Both</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="ruleAction">Action:</label>
+                    <select id="ruleAction" name="action">
+                        <option value="log">Log only</option>
+                        <option value="modify">Modify</option>
+                        <option value="block">Block</option>
+                    </select>
+                </div>
+                <div class="checkbox-group">
+                    <input type="checkbox" id="ruleEnabled" name="enabled" checked>
+                    <label for="ruleEnabled">Rule Enabled</label>
+                </div>
+                <button type="submit">Add Rule</button>
+            </form>
+
+            <div id="ruleMessage"></div>
+
+            <h2>📏 Active Interception Rules ({{.RulesCount}})</h2>
+            <div class="rules" id="rulesList">
+                {{if gt .RulesCount 0}}
+                    {{range $key, $rule := .Rules}}
+                    <div class="rule-item" id="rule-{{$key}}">
+                        <div class="mapping-header">
+                            <div>
+                                <strong>{{$rule.Name}}</strong> - <span style="font-style: italic;">{{$rule.Action}}</span>
+                                <small>URL: {{if $rule.PathPattern}}{{$rule.PathPattern}}{{else}}Any{{end}} | Method: {{if $rule.Method}}{{$rule.Method}}{{else}}Any{{end}} | Type: {{$rule.BodyType}}</small>
+                                {{if $rule.Enabled}}
+                                <span style="color: green; font-weight: bold;">✅ Enabled</span>
+                                {{else}}
+                                <span style="color: red; font-weight: bold;">❌ Disabled</span>
+                                {{end}}
+                            </div>
+                            <button class="delete-btn" onclick="deleteRule('{{$key}}')">🗑️ Delete</button>
+                        </div>
+                    </div>
+                    {{end}}
+                {{else}}
+                    <div style="text-align: center; color: #666; padding: 20px;">No rules configured.</div>
+                {{end}}
+            </div>
+        </div>
+
+        <!-- Tab: Logs -->
+        <div id="logs" class="tab-content">
+            <h2>📝 Real-time Logs</h2>
+            <div class="logs" id="logsContainer">
+                <div>Loading logs...</div>
+            </div>
+            <button onclick="clearLogs()">🧹 Clear Logs</button>
+            <button onclick="refreshLogs()">🔄 Refresh</button>
+            <small>Logs automatically update every 5 seconds</small>
+        </div>
+
+        <!-- Tab: Test -->
+        <div id="test" class="tab-content">
+            <h2>🧪 Search Test</h2>
+            <div class="form-group">
+                <label for="testTerm">Search Term:</label>
+                <input type="text" id="testTerm" placeholder="Ex: The Walking Dead S01E01">
+                <button onclick="testSearch()">🔍 Test</button>
+                <small>Test how a term will be transformed according to your mappings</small>
+            </div>
+            <div id="testResult"></div>
+        </div>
+    </div>
+
+    <script>
+        // Helper to set default for Go template if value is empty (for display)
+        function iif(condition, trueVal, falseVal) {
+            return condition ? trueVal : falseVal;
+        }
+        String.prototype.default = function(def) {
+            return this.toString() === "" ? def : this.toString();
+        };
+        Boolean.prototype.iif = function(trueVal, falseVal) {
+            return this ? trueVal : falseVal;
+        };
+        
+        // Update Cache Status color based on text
+        function updateCacheStatusColor() {
+            const statusSpan = document.getElementById('cacheStatusColor');
+            if (statusSpan) {
+                const statusText = statusSpan.textContent || statusSpan.innerText;
+                if (statusText.includes('ACTIVE')) {
+                    statusSpan.style.color = 'green';
+                } else if (statusText.includes('OUTDATED') || statusText.includes('EMPTY')) {
+                    statusSpan.style.color = 'orange';
+                } else {
+                    statusSpan.style.color = 'red';
+                }
+            }
+        }
+
+
+        function showTab(tabName) {
+            // Hide all content
+            document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
+            document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+            
+            // Show the correct content
+            document.getElementById(tabName).classList.add('active');
+            // Find the button that was clicked. If event.target is not available (e.g. direct call), find by data-tab attribute.
+            const clickedButton = event ? event.target : document.querySelector(`.tab-button[onclick="showTab('${tabName}')"]`);
+            if (clickedButton) {
+                 clickedButton.classList.add('active');
+            }
+            
+            // Load rules if it's the rules tab
+            if (tabName === 'rules') {
+                // loadRules(); // Rules are now loaded via Go template
+            }
+        }
+
+        // Handle mapping add form
+        document.getElementById('addMappingForm').onsubmit = function(e) {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const data = Object.fromEntries(formData);
+            
+            // Convert types
+            data.tvdbId = parseInt(data.tvdbId);
+            data.season = parseInt(data.season);
+            
+            // Client-side validation
+            if (!data.tvdbId || data.tvdbId <= 0) {
+                document.getElementById('message').innerHTML = '<p class="error">❌ Invalid TVDB ID</p>';
+                return;
+            }
+            
+            fetch('/web/add-mapping', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)
+            })
+            .then(res => res.json())
+            .then(data => {
+                const messageDiv = document.getElementById('message');
+                if (data.status === 'success') {
+                    messageDiv.innerHTML = '<p class="success">✅ ' + data.message + '</p>';
+                    setTimeout(() => location.reload(), 1000); // Reload to see changes
+                } else {
+                    messageDiv.innerHTML = '<p class="error">❌ ' + data.message + '</p>';
+                }
+            })
+            .catch(err => {
+                document.getElementById('message').innerHTML = '<p class="error">❌ Error: ' + err + '</p>';
+            });
+        };
+
+        // Handle rule add form
+        document.getElementById('addRuleForm').onsubmit = function(e) {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const data = Object.fromEntries(formData);
+            
+            // Convert checkbox
+            data.enabled = document.getElementById('ruleEnabled').checked;
+            
+            fetch('/web/add-rule', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)
+            })
+            .then(res => res.json())
+            .then(data => {
+                const messageDiv = document.getElementById('ruleMessage');
+                if (data.status === 'success') {
+                    messageDiv.innerHTML = '<p class="success">✅ ' + data.message + '</p>';
+                    // loadRules(); // Reload the page to see new rule from template
+                    setTimeout(() => location.reload(), 1000); 
+                    // document.getElementById('addRuleForm').reset();
+                    // document.getElementById('ruleEnabled').checked = true;
+                } else {
+                    messageDiv.innerHTML = '<p class="error">❌ ' + data.message + '</p>';
+                }
+            })
+            .catch(err => {
+                document.getElementById('ruleMessage').innerHTML = '<p class="error">❌ Error: ' + err + '</p>';
+            });
+        };
+
+        // Delete a mapping
+        function deleteMapping(key) {
+            if (!confirm('Are you sure you want to delete this mapping?')) return;
+            
+            fetch('/web/delete-mapping', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({key: key})
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    // document.getElementById('mapping-' + key).remove(); // Let page reload handle this
+                    document.getElementById('message').innerHTML = '<p class="success">✅ Mapping deleted</p>';
+                    setTimeout(() => location.reload(), 1000); // Reload to reflect changes
+                } else {
+                    document.getElementById('message').innerHTML = '<p class="error">❌ Error during deletion: ' + (data.message || 'Unknown error') + '</p>';
+                }
+            })
+            .catch(err => {
+                document.getElementById('message').innerHTML = '<p class="error">❌ Error during deletion</p>';
+            });
+        }
+
+        // Delete a rule
+        function deleteRule(key) {
+            if (!confirm('Are you sure you want to delete this rule?')) return;
+            
+            fetch('/web/delete-rule', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({key: key})
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    document.getElementById('ruleMessage').innerHTML = '<p class="success">✅ Rule deleted</p>';
+                    // loadRules(); // Reload the page to see changes from template
+                    setTimeout(() => location.reload(), 1000);
+                } else {
+                     document.getElementById('ruleMessage').innerHTML = '<p class="error">❌ Error during deletion: ' + (data.message || 'Unknown error') + '</p>';
+                }
+            })
+            .catch(err => {
+                document.getElementById('ruleMessage').innerHTML = '<p class="error">❌ Error during deletion</p>';
+            });
+        }
+
+        // Search test
+        function testSearch() {
+            const term = document.getElementById('testTerm').value;
+            if (!term) {
+                document.getElementById('testResult').innerHTML = '<p class="error">Please enter a search term</p>';
+                return;
+            }
+            
+            fetch('/web/test-search', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({term: term})
+            })
+            .then(res => res.json())
+            .then(data => {
+                const resultClass = data.mapped ? 'success' : 'error';
+                document.getElementById('testResult').innerHTML = 
+                    '<div style="background: #f9f9f9; padding: 15px; border-radius: 5px; margin-top: 10px;">' +
+                    '<h3>Test Result:</h3>' +
+                    '<p><strong>Original Term:</strong> ' + data.original + '</p>' +
+                    '<p><strong>Modified Term:</strong> ' + data.modified + '</p>' +
+                    '<p><strong>Mapping Applied:</strong> <span class="' + resultClass + '">' + (data.mapped ? '✅ Yes' : '❌ No') + '</span></p>' +
+                    '</div>';
+            })
+            .catch(err => {
+                document.getElementById('testResult').innerHTML = '<p class="error">❌ Error during test</p>';
+            });
+        }
+
+        // Log refresh
+        function refreshLogs() {
+            fetch('/web/logs')
+            .then(res => res.text())
+            .then(data => {
+                const container = document.getElementById('logsContainer');
+                container.innerHTML = data || '<div>No logs available</div>';
+                // Auto-scroll to bottom
+                container.scrollTop = container.scrollHeight;
+            })
+            .catch(err => {
+                document.getElementById('logsContainer').innerHTML = '<div class="error">Error loading logs</div>';
+            });
+        }
+
+        function clearLogs() {
+            fetch('/web/clear-logs', {method: 'POST'})
+            .then(res => res.json())
+            .then(data => {
+                if(data.status === 'success') {
+                    refreshLogs();
+                } else {
+                    alert('Failed to clear logs: ' + (data.message || 'Unknown error'));
+                }
+            })
+            .catch(err => {
+                console.error('Error clearing logs:', err);
+                alert('Error clearing logs.');
+            });
+        }
+
+        // Auto-refresh logs every 5 seconds
+        setInterval(refreshLogs, 5000);
+
+        // Load information on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            refreshLogs();
+            updateCacheStatusColor(); // Update color on initial load
+            
+            // Add examples for popular TVDB IDs
+            const tvdbInput = document.getElementById('tvdbId');
+            const originalPlaceholder = tvdbInput.placeholder;
+            tvdbInput.addEventListener('focus', function() {
+                if (!this.value) {
+                    this.placeholder = 'Ex: 152831 (Adventure Time), 153021 (Walking Dead), 121361 (Game of Thrones)';
+                }
+            });
+            
+            tvdbInput.addEventListener('blur', function() {
+                this.placeholder = originalPlaceholder;
+            });
+            
+            // Check if there's a hash and show the corresponding tab
+            if (window.location.hash) {
+                const tabName = window.location.hash.substring(1); // remove #
+                const tabElement = document.getElementById(tabName);
+                if (tabElement && tabElement.classList.contains('tab-content')) {
+                    showTab(tabName);
+                }
+            }
+        });
+
+        // Update hash on tab click for bookmarking/linking
+        document.querySelectorAll('.tab-button').forEach(button => {
+            button.addEventListener('click', function(event) {
+                const tabId = this.getAttribute('onclick').match(/'([^']+)'/)[1];
+                window.location.hash = tabId;
+            });
+        });
+
+    </script>
+</body>
+</html>
