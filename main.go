@@ -595,12 +595,6 @@ func transfer(destination io.WriteCloser, source io.ReadCloser, id string) {
 	// addLog(fmt.Sprintf("🔚 Transfer finished %s, %d bytes copied", id, bytesCopied))
 }
 
-// --- Start of functions you already had and are still useful ---
-// (loadMappings, saveMappings, loadRules, saveRules, adminHandler, addMappingHandler, etc.)
-// (httpProxyHandler, modifyRequestBody, modifyResponseBody, replaceSerieName, shouldIntercept)
-// Ensure they are present and correct.
-// I'm including slightly modified/cleaned versions of some.
-
 // Save mappings to file
 func saveMappings() {
 	mappingsMutex.Lock()
@@ -667,60 +661,6 @@ func saveRules() {
 	} else {
 		addLog(fmt.Sprintf("💾 Rules saved to %s", INTERCEPTION_RULES_FILE))
 	}
-}
-
-// Load interception rules
-func loadRules() {
-	rulesMutex.Lock()
-	defer rulesMutex.Unlock()
-
-	file, err := os.Open(INTERCEPTION_RULES_FILE)
-	if err != nil {
-		if os.IsNotExist(err) {
-			addLog(fmt.Sprintf("Rules file '%s' not found, creating with default rules.", INTERCEPTION_RULES_FILE))
-			// Initialize with default rules if the file doesn't exist
-			interceptionRules = make(map[string]InterceptionRule) // Ensure it's initialized
-			interceptionRules["log_sonarr_releases"] = InterceptionRule{
-				Name:        "Log Sonarr Release Results",
-				Method:      "GET",
-				PathPattern: "/api/v3/release", // Sonarr API endpoint for release search results
-				BodyType:    "response",
-				Action:      "log",
-				Enabled:     true,
-			}
-			interceptionRules["modify_sonarr_search_terms"] = InterceptionRule{
-				Name:        "Modify Sonarr Search Terms",
-				Method:      "POST",
-				PathPattern: "/api/v3/search", // Sonarr API endpoint for initiating a search
-				BodyType:    "request",
-				Action:      "modify",
-				Enabled:     true,
-			}
-			interceptionRules["modify_sonarr_series_alttitles"] = InterceptionRule{
-				Name:        "Modify Sonarr Series Alternate Titles",
-				Method:      "GET",
-				PathPattern: "/api/v3/series", // Sonarr API endpoint for series details
-				BodyType:    "response",
-				Action:      "modify",
-				Enabled:     true,
-			}
-			// No need for a scenemapping rule here, it's handled by the cache.
-			saveRules() // Save default rules to create the file
-		} else {
-			addLog(fmt.Sprintf("Error opening rules file '%s': %v", INTERCEPTION_RULES_FILE, err))
-		}
-		return
-	}
-	defer file.Close()
-
-	interceptionRules = make(map[string]InterceptionRule) // Initialize
-	if err := json.NewDecoder(file).Decode(&interceptionRules); err != nil {
-		if err != io.EOF { // EOF is ok for an empty JSON file (an empty map)
-			addLog(fmt.Sprintf("Error reading/decoding rules from '%s': %v", INTERCEPTION_RULES_FILE, err))
-			interceptionRules = make(map[string]InterceptionRule) // Reset in case of error
-		}
-	}
-	addLog(fmt.Sprintf("📏 Interception rules loaded from '%s': %d entries", INTERCEPTION_RULES_FILE, len(interceptionRules)))
 }
 
 // Replace series name according to mapping
@@ -1385,7 +1325,6 @@ func main() {
 	// Load mappings and rules
 	loadMitmCertificate()
 	loadMappings()
-	loadRules()
 
 	// Add default mappings if none are loaded
 	if len(seriesMappings) == 0 {

@@ -47,7 +47,6 @@
 
         <div class="tabs">
             <div class="tab-button active" onclick="showTab('mappings')">🔗 Mapping Management</div>
-            <div class="tab-button" onclick="showTab('rules')">📏 Interception Rules</div>
             <div class="tab-button" onclick="showTab('logs')">📝 Real-time Logs</div>
             <div class="tab-button" onclick="showTab('test')">🧪 Search Test</div>
         </div>
@@ -119,81 +118,6 @@
                 <p>No mappings configured. Add one to get started!</p>
             </div>
             {{end}}
-        </div>
-
-        <!-- Tab: Rules -->
-        <div id="rules" class="tab-content">
-            <h2>➕ Add an Interception Rule</h2>
-            <form id="addRuleForm">
-                <div class="form-group">
-                    <label for="ruleName">Rule Name:</label>
-                    <input type="text" id="ruleName" name="name" required 
-                           placeholder="Ex: Log all searches">
-                </div>
-                <div class="form-group">
-                    <label for="ruleMethod">HTTP Method:</label>
-                    <select id="ruleMethod" name="method">
-                        <option value="">All</option>
-                        <option value="GET">GET</option>
-                        <option value="POST">POST</option>
-                        <option value="PUT">PUT</option>
-                        <option value="DELETE">DELETE</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label for="rulePattern">URL Pattern:</label>
-                    <input type="text" id="rulePattern" name="pathPattern" 
-                           placeholder="Ex: /v1/scenemapping (leave empty for all)">
-                    <small>Part of the URL to match (e.g., /v1/scenemapping, /api/v3/series, /release)</small>
-                </div>
-                <div class="form-group">
-                    <label for="ruleBodyType">Body Type:</label>
-                    <select id="ruleBodyType" name="bodyType">
-                        <option value="request">Request</option>
-                        <option value="response">Response</option>
-                        <option value="both">Both</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label for="ruleAction">Action:</label>
-                    <select id="ruleAction" name="action">
-                        <option value="log">Log only</option>
-                        <option value="modify">Modify</option>
-                        <option value="block">Block</option>
-                    </select>
-                </div>
-                <div class="checkbox-group">
-                    <input type="checkbox" id="ruleEnabled" name="enabled" checked>
-                    <label for="ruleEnabled">Rule Enabled</label>
-                </div>
-                <button type="submit">Add Rule</button>
-            </form>
-
-            <div id="ruleMessage"></div>
-
-            <h2>📏 Active Interception Rules ({{.RulesCount}})</h2>
-            <div class="rules" id="rulesList">
-                {{if gt .RulesCount 0}}
-                    {{range $key, $rule := .Rules}}
-                    <div class="rule-item" id="rule-{{$key}}">
-                        <div class="mapping-header">
-                            <div>
-                                <strong>{{$rule.Name}}</strong> - <span style="font-style: italic;">{{$rule.Action}}</span>
-                                <small>URL: {{if $rule.PathPattern}}{{$rule.PathPattern}}{{else}}Any{{end}} | Method: {{if $rule.Method}}{{$rule.Method}}{{else}}Any{{end}} | Type: {{$rule.BodyType}}</small>
-                                {{if $rule.Enabled}}
-                                <span style="color: green; font-weight: bold;">✅ Enabled</span>
-                                {{else}}
-                                <span style="color: red; font-weight: bold;">❌ Disabled</span>
-                                {{end}}
-                            </div>
-                            <button class="delete-btn" onclick="deleteRule('{{$key}}')">🗑️ Delete</button>
-                        </div>
-                    </div>
-                    {{end}}
-                {{else}}
-                    <div style="text-align: center; color: #666; padding: 20px;">No rules configured.</div>
-                {{end}}
-            </div>
         </div>
 
         <!-- Tab: Logs -->
